@@ -1,4 +1,5 @@
 # python/m1/m1.8_homework.py
+
 """M1.8 Homework: Gate Your Own Action Tool.
 
 THE IDEA
@@ -55,9 +56,9 @@ from models import model
 # ════════════════════════════════════════════════════════════════════════
 
 @tool
-def your_action_tool(argument: str) -> str:
-    """TODO 1: replace this docstring and body with your own action tool."""
-    raise NotImplementedError("TODO 1: see the comment block above")
+def book_meeting_room(room_name: str) -> str:
+    """Book a meeting room for a team meeting."""
+    return f"Meeting room '{room_name}' has been booked successfully."
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -74,18 +75,32 @@ def your_action_tool(argument: str) -> str:
 #     want to call it.
 # ════════════════════════════════════════════════════════════════════════
 
-SYSTEM_PROMPT = "TODO 2: replace this with your own system prompt."
-INITIAL_REQUEST = "TODO 2: replace this with a request that would trigger your tool."
-INTERRUPT_ON = {"your_action_tool": True}  # TODO 2: replace with your own allowed_decisions config
+SYSTEM_PROMPT = """
+You are a helpful assistant that can book meeting rooms.
 
-if "TODO 1" in your_action_tool.description:
+Rules:
+- Use the book_meeting_room tool whenever a user asks to reserve or book a meeting room.
+- Do not claim that a room has been booked until the tool confirms it.
+- Keep responses professional and concise.
+"""
+
+INITIAL_REQUEST = "Please book Conference Room A for tomorrow's project discussion."
+
+INTERRUPT_ON = {
+    "book_meeting_room": {
+        "allowed_decisions": ["approve", "edit", "reject"]
+    }
+}
+
+if "TODO 1" in book_meeting_room.description:
     raise NotImplementedError("TODO 1: see the comment block above")
+
 if "TODO 2" in SYSTEM_PROMPT or "TODO 2" in INITIAL_REQUEST:
     raise NotImplementedError("TODO 2: see the comment block above")
 
 agent = create_deep_agent(
     model=model,
-    tools=[your_action_tool],
+    tools=[book_meeting_room],
     system_prompt=SYSTEM_PROMPT,
     interrupt_on=INTERRUPT_ON,
     checkpointer=MemorySaver(),
@@ -102,31 +117,53 @@ result = agent.invoke(
 while result.interrupts:
     pending = result.interrupts[0].value
     decisions = []
+
     for req in pending["action_requests"]:
         print(f"\nApproval required for {req['name']}:")
         print(req["args"])
 
-        choice = input("\nApprove, edit, or reject? (approve/edit/reject): ").strip().lower()
+        choice = input(
+            "\nApprove, edit, or reject? (approve/edit/reject): "
+        ).strip().lower()
+
         if choice in ("approve", "yes", "y"):
             decisions.append({"type": "approve"})
+
         elif choice in ("edit", "e"):
             edited_args = dict(req["args"])
+
             key = next(iter(edited_args))
-            edited_args[key] = input(f"New value for '{key}': ")
+
+            edited_args[key] = input(
+                f"New value for '{key}': "
+            )
+
             decisions.append(
                 {
                     "type": "edit",
-                    "edited_action": {"name": req["name"], "args": edited_args},
+                    "edited_action": {
+                        "name": req["name"],
+                        "args": edited_args,
+                    },
                 }
             )
+
         else:
             decisions.append(
-                {"type": "reject", "message": "User rejected this action."}
+                {
+                    "type": "reject",
+                    "message": "User rejected this action.",
+                }
             )
 
-    result = agent.invoke(Command(resume={"decisions": decisions}), config=config, version="v2")
+    result = agent.invoke(
+        Command(resume={"decisions": decisions}),
+        config=config,
+        version="v2",
+    )
 
 for msg in result.value["messages"]:
-    if hasattr(msg, "name") and msg.name == "your_action_tool":
+    if hasattr(msg, "name") and msg.name == "book_meeting_room":
         print(msg.content)
         break
+# TODO 2: Configure interrupt_on for your tool, and write a system

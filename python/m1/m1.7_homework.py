@@ -1,4 +1,3 @@
-# python/m1/m1.7_homework.py
 """M1.7 Homework: Design Your Own Multi-Thread Scenario.
 
 THE IDEA
@@ -22,7 +21,7 @@ RUN
   cd python
   uv run ./m1/m1.7_homework.py
 """
-
+import time 
 import warnings
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -48,8 +47,8 @@ agent = create_deep_agent(
 #     thread_a = {"configurable": {"thread_id": "my-thread-a"}}
 # ════════════════════════════════════════════════════════════════════════
 
-thread_a = None  # TODO 1: replace with your own thread config
-thread_b = None  # TODO 1: replace with your own thread config
+thread_a = {"configurable": {"thread_id": "nandini-thread-a"}}
+thread_b = {"configurable": {"thread_id": "nandini-thread-b"}}
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -76,9 +75,89 @@ thread_b = None  # TODO 1: replace with your own thread config
 #   )
 # ════════════════════════════════════════════════════════════════════════
 
+
 def run_scenario():
-    """TODO 2: run the multi-turn, multi-thread scenario described above."""
-    raise NotImplementedError("TODO 2: see the comment block above")
+    """Run the multi-turn, multi-thread scenario."""
+
+    # THREAD A - STORE INFORMATION
+
+    result = agent.invoke(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Remember that my favorite programming language is Python."
+                }
+            ]
+        },
+        config=thread_a,
+    )
+
+    print("Thread A - Turn 1:")
+    print(result["messages"][-1].text)
+
+    # THREAD A - RECALL INFORMATION
+
+    result = agent.invoke(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is my favorite programming language?"
+                }
+            ]
+        },
+        config=thread_a,
+    )
+
+    print("\nThread A - Turn 2:")
+    print(result["messages"][-1].text)
+
+    # THREAD B - SHOULD NOT REMEMBER
+
+    result = agent.invoke(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is my favorite programming language?"
+                }
+            ]
+        },
+        config=thread_b,
+    )
+
+    print("\nThread B - Turn 1:")
+    print(result["messages"][-1].text)
+
+    # NEW AGENT WITH A NEW MEMORYSAVER
+
+    fresh_agent = create_deep_agent(
+        model=model,
+        checkpointer=MemorySaver(),
+    )
+
+    result = fresh_agent.invoke(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is my favorite programming language?"
+                }
+            ]
+        },
+        config=thread_a,
+    )
+
+    print("\nFresh Agent Using Same Thread ID:")
+    print(result["messages"][-1].text)
+
+    print(
+        "\nExplanation: Even though the thread_id is the same, "
+        "this new agent has a brand-new MemorySaver. "
+        "The memory was stored in the original MemorySaver instance, "
+        "not in the thread_id itself."
+    )
 
 
 run_scenario()

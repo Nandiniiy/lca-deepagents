@@ -97,7 +97,7 @@ def run_test_prompts():
     print(in_domain["messages"][-1].content)
 
     print("\nOut-of-domain response:")
-    print(out_of_domain["messages"][-1].content)
+    print(out_of_domain["messages"][-1].text)
 
 
 run_test_prompts()

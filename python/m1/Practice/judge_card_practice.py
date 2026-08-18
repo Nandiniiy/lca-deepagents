@@ -59,6 +59,8 @@ RUN
 
 from __future__ import annotations
 
+import asyncio
+
 from langchain_core.tools import tool
 
 from judge_card_helpers import (
@@ -129,10 +131,25 @@ trophies.""" + TOOL_SEQUENCE,
     # TODO 1: name and write your own persona here. Keep the same job
     # (score three traits, match a product, hand off a verdict)
     # Give it a name and a voice all your own.
-    "your_persona": """TODO 1: replace this with your own judge persona. Give
-yourself a name and a distinct voice (see the three judges above for the
-shape), then call yourself that name wherever judge_name is expected
-below.""" + TOOL_SEQUENCE,
+    "your_persona": """You are Data Didi, a dramatic but practical senior
+developer who judges builders like she is reviewing their code, their
+coffee choices, and their life decisions at the same time. Speak with
+warm, desi big-sister energy: playful, direct, mildly roasting, but never
+actually mean. Use phrases like "listen beta," "arre wah," "full marks
+for confidence," and "this is giving production issue vibes" when it
+fits. You must stay in character at all times.
+
+Your job is to judge the user's quiz answers, score the three traits,
+match the user to a LangChain product, and create one memorable verdict
+line for the result card. Treat the trait scores like a mini code review:
+organized answers are clean architecture, chaotic answers are spicy
+debugging energy, cautious answers are careful testing, bold answers are
+ship-it energy, solo answers are lone-wolf mode, and collaborative
+answers are proper team-player behaviour.
+
+Your verdict should feel funny, human, and card-worthy. Roast gently, but
+also make the user feel like they can still become a very useful builder
+after one more cup of chai and maybe a better Git commit message.""" + TOOL_SEQUENCE,
 }
 
 
@@ -146,18 +163,20 @@ below.""" + TOOL_SEQUENCE,
 # ════════════════════════════════════════════════════════════════════════
 
 @tool
-def score_and_match(answers: list[tuple[int, int, int]]) -> dict:
+def score_and_match(answers: list[list[int]]) -> dict:
     """Tally the quiz answers into three 0-100 trait scores and pick a
     matching LangChain product. Call this first, with the exact answers
     list you were given."""
     # Each of the 3 trait scores (chaotic/organized, cautious/bold,
     # solo/collaborative) starts neutral, at 50.
     scores = [50, 50, 50]
-    # answers is a list of (delta_1, delta_2, delta_3) tuples, one per
+
+    # answers is a list of [delta_1, delta_2, delta_3] lists, one per
     # question. Add each delta onto its matching score.
-    for delta_tuple in answers:
+    for delta_list in answers:
         for i in range(3):
-            scores[i] += delta_tuple[i]
+            scores[i] += delta_list[i]
+
     # A long run of the same answer could push a score past 0 or 100, so
     # clamp every score back into that range.
     scores = [max(0, min(100, score)) for score in scores]
@@ -176,9 +195,21 @@ def score_and_match(answers: list[tuple[int, int, int]]) -> dict:
     # 3. Set product to PRODUCT_MATCHES[direction.lower()], e.g.
     #    PRODUCT_MATCHES["chaotic"] -> "Fleet".
     # 4. Return {"trait_scores": scores, "product": product}.
-    raise NotImplementedError("TODO 2: see the comments above")
+    axis_index = max(range(len(scores)), key=lambda i: abs(scores[i] - 50))
 
+    left_label, right_label = TRAIT_AXES[axis_index]
 
+    if scores[axis_index] >= 50:
+        direction = right_label
+    else:
+        direction = left_label
+
+    product = PRODUCT_MATCHES[direction.lower()]
+
+    return {
+        "trait_scores": scores,
+        "product": product,
+    }
 # ════════════════════════════════════════════════════════════════════════
 # TODO 3 (Lesson 1.6, MCP: Connecting Agents to External Services)
 # A stretch goal.
@@ -217,7 +248,74 @@ def fetch_product_fact(product: str) -> str:
     """Look up one grounded, factual sentence about the LangChain product
     you were matched with. Call this right after score_and_match, passing
     in the product name it returned."""
-    raise NotImplementedError("TODO 3: see the comment block above")
+
+    async def _fetch_product_fact_with_mcp(product_name: str) -> str:
+        from langchain_mcp_adapters.client import MultiServerMCPClient
+        from langgraph.prebuilt import create_react_agent
+
+        client = MultiServerMCPClient(
+            {
+                "langchain_docs": {
+                    "url": "https://docs.langchain.com/mcp",
+                    "transport": "streamable_http",
+                }
+            }
+        )
+
+        tools = await client.get_tools()
+        docs_tools = [
+            tool_item
+            for tool_item in tools
+            if tool_item.name == "search_docs_by_lang_chain"
+        ]
+
+        if not docs_tools:
+            return PLACEHOLDER_FACT
+
+        agent = create_react_agent(model, docs_tools)
+
+        result = await agent.ainvoke(
+            {
+                "messages": [
+                    (
+                        "user",
+                        "Describe the LangChain product "
+                        f"{product_name} in one factual sentence under "
+                        "25 words. Use only the docs tool.",
+                    )
+                ]
+            }
+        )
+
+        last_message = result["messages"][-1]
+        content = getattr(last_message, "content", last_message)
+
+        if isinstance(content, list):
+            pieces = []
+            for item in content:
+                if isinstance(item, dict):
+                    pieces.append(str(item.get("text") or item.get("content") or ""))
+                else:
+                    pieces.append(str(item))
+            fact = " ".join(piece for piece in pieces if piece).strip()
+        else:
+            fact = str(content).strip()
+
+        fact = " ".join(fact.split())
+
+        if not fact:
+            return PLACEHOLDER_FACT
+
+        words = fact.split()
+        if len(words) > 25:
+            fact = " ".join(words[:25]).rstrip(".,;:") + "."
+
+        return fact
+
+    try:
+        return asyncio.run(_fetch_product_fact_with_mcp(product))
+    except Exception:
+        return PLACEHOLDER_FACT
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -228,17 +326,19 @@ def fetch_product_fact(product: str) -> str:
 # You'll get multiple cards to compare, judging the same quiz answers.
 # ════════════════════════════════════════════════════════════════════════
 
-JUDGES_TO_RUN = ["your_persona"]  # TODO 4: e.g. ["your_persona", "ancient_mummy"]
-
+JUDGES_TO_RUN = ["your_persona", "ancient_mummy"]  # TODO 4: e.g. ["your_persona", "ancient_mummy"]
 
 def build_user_prompt(answers: list[tuple[int, int, int]]) -> str:
+    answers_as_lists = [list(answer) for answer in answers]
+
     return (
         "Here are my personality quiz answers as a list of "
-        "(chaotic/organized, cautious/bold, solo/collaborative) deltas, in "
-        f"order: {answers}. Call score_and_match with this exact list, then "
+        "[chaotic/organized, cautious/bold, solo/collaborative] delta lists, in "
+        f"order: {answers_as_lists}. Call score_and_match with this exact list, then "
         "fetch_product_fact with the product it returns, then render and "
         "post my card."
     )
+
 
 
 if __name__ == "__main__":
@@ -251,6 +351,6 @@ if __name__ == "__main__":
             user_prompt=user_prompt,
             tools=[score_and_match, fetch_product_fact, render_card, post_card],
             model=model,  # TODO 6 (Lesson 1.3, Models, optional): from models import strong_model and try it here
-            interrupt_on=None,  # TODO 5 (Lesson 1.8, Human-in-the-Loop: Decision Types): gate post_card, e.g. {"post_card": True}
+            interrupt_on={"post_card": True},  # TODO 5 (Lesson 1.8, Human-in-the-Loop: Decision Types): gate post_card, e.g. {"post_card": True}
         )
     print(f"\nCards saved to {OUTPUT_DIR}/")

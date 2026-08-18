@@ -1,8 +1,8 @@
+import truststore
+truststore.inject_into_ssl()
 import asyncio
-
 from deepagents import create_deep_agent
 from langchain_mcp_adapters.client import MultiServerMCPClient
-
 from models import model
 
 
@@ -33,7 +33,7 @@ async def main():
     result = await agent.ainvoke({
         "messages": [{"role": "user", "content": "Use the LangChain docs MCP tool to explain what MCP is and how LangChain uses MCP tools."}]
     })
-    print(result["messages"][-1].content)
+    print(result["messages"][-1].text)
 
 
 asyncio.run(main())

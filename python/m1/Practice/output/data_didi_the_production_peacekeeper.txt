@@ -1,0 +1,24 @@
+
+                ___
+               [o_o]
+               /|_|\
+                | |
+
+  ┌──────────────────────────────┐
+  │  THE PRODUCTION PEACEKEEPER  │
+  └──────────────────────────────┘
+
+  Chaotic  [███████░░░░░░░] Organized
+  ───────────────────────────────────────
+  Cautious [███████░░░░░░░] Bold
+  ───────────────────────────────────────
+  Solo     [████████░░░░░░] Collaborative
+
+  "Deployment is your match, listen beta: your
+  team-first energy deserves a proper runtime
+  purpose-built to deploy and scale stateful
+  agent workloads reliably in production."
+
+  judged by Data Didi
+
+ matched product: Deployment
